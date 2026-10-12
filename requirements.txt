@@ -1,0 +1,7 @@
+langchain-core
+langchain-google-genai
+google-generativeai
+pydantic
+pyttsx3
+flask
+playsound3

@@ -1,0 +1,14 @@
+name: envServiceLLM
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pywin32
+  - pip:
+    - langchain-core
+    - langchain-google-genai
+    - google-generativeai
+    - pydantic
+    - pyttsx3
+    - flask
