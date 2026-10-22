@@ -1,1 +1,9 @@
-{"date": "2026-10-09", "count": 202, "last_warned": 200}
+{
+  "date": "2026-10-09",
+  "count": 202,
+  "last_warned": 200,
+  "2026-10-22": {
+    "count": 4,
+    "last_warned": 0
+  }
+}

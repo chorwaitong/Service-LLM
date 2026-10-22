@@ -34,7 +34,14 @@ handler.setFormatter(formatter)
 # 4. Add the handler to the logger
 logger.addHandler(handler)
 
-# Set your custom process name here
+# Custom filter class
+class SuppressHealthCheckFilter(logging.Filter):
+    def filter(self, record):
+        # Suppress log messages containing GET /health
+        return "GET /health" not in record.getMessage()
+
+# Attach the filter to Werkzeug's logger
+logging.getLogger("werkzeug").addFilter(SuppressHealthCheckFilter())
 
 
 def safe_parse_llm_json(response):
@@ -256,6 +263,7 @@ class DailyUsageTracker:
         record = self._get_today_record()
         record["count"] += 1
         self._persist()
+        print (record)
         return record["count"]
 
     def should_warn(self):
