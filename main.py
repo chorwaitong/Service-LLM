@@ -10,6 +10,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 import pyttsx3
+
 import threading
 import time
 
@@ -32,6 +33,9 @@ handler.setFormatter(formatter)
 
 # 4. Add the handler to the logger
 logger.addHandler(handler)
+
+# Set your custom process name here
+
 
 def safe_parse_llm_json(response):
     """
