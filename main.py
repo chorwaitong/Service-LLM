@@ -197,50 +197,80 @@ class Utterance():
         return True
            
 class DailyUsageTracker:
-    def __init__(self, path="llm_usage.json", limit=250):
+    def __init__(self, path="llm_usage.json", limit=200):
         self.path = path
         self.limit = limit
+        self.data = {}
         self._load()
 
     def _load(self):
-        today = date.today().isoformat()
         if os.path.exists(self.path):
-            with open(self.path, "r") as f:
-                data = json.load(f)
-            if data.get("date") == today:
-                self.date = today
-                self.count = data.get("count", 0)
-                self.last_warned = data.get("last_warned", 0)
-                return
+            try:
+                with open(self.path, "r") as f:
+                    self.data = json.load(f)
+            except Exception as e:
+                logging.error(f"Failed to load usage file: {e}")
+                self.data = {}
 
-        # reset for new day
-        self.date = today
-        self.count = 0
-        self.last_warned = 0
-        self._persist()
+        # Old codes before issues with date handling
+        # today = date.today().isoformat()
+        # if os.path.exists(self.path):
+        #     with open(self.path, "r") as f:
+        #         data = json.load(f)
+        #     if data.get("date") == today:
+        #         self.date = today
+        #         self.count = data.get("count", 0)
+        #         self.last_warned = data.get("last_warned", 0)
+        #         return
+
+        # # reset for new day
+        # self.date = today
+        # self.count = 0
+        # self.last_warned = 0
+        # self._persist()
+
+    def _get_today_record(self):
+        today = date.today().isoformat()
+        # If the date changes (e.g. midnight crossed or system woke from hibernation)
+        if today not in self.data:
+            self.data[today] = {"count": 0, "last_warned": 0}
+            self._persist()
+        return self.data[today]
 
     def _persist(self):
-        with open(self.path, "w") as f:
-            json.dump({
-                "date": self.date,
-                "count": self.count,
-                "last_warned": self.last_warned
-            }, f)
+        try:
+            with open(self.path, "w") as f:
+                json.dump(self.data, f, indent=2)
+        except Exception as e:
+            logging.error(f"Failed to persist usage file: {e}")
+
+    def _get_today_record(self):
+        today = date.today().isoformat()
+        # If the date changes (e.g. midnight crossed or system woke from hibernation)
+        if today not in self.data:
+            self.data[today] = {"count": 0, "last_warned": 0}
+            self._persist()
+        return self.data[today]
 
     def increment(self):
-        self.count += 1
+        record = self._get_today_record()
+        record["count"] += 1
         self._persist()
-        return self.count
+        return record["count"]
 
     def should_warn(self):
+        record = self._get_today_record()
+        count = record["count"]
+        last_warned = record["last_warned"]
         return (
-            self.count >= 150 and
-            self.count <= self.limit and
-            self.count - self.last_warned >= 50
+            count >= 150 and
+            count <= self.limit and
+            count - last_warned >= 50
         )
 
     def mark_warned(self):
-        self.last_warned = self.count
+        record = self._get_today_record()
+        record["last_warned"] = record["count"]
         self._persist()
 
 try:
