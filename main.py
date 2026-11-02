@@ -87,19 +87,36 @@ def safe_parse_llm_json_v2(response):
         return parse_json_markdown(text)
     except Exception:
         try:
-            # 2. Pre-process unescaped backslashes:
+            # cleaned_text = text
             
-            # Target LaTeX commands (2+ letter words following a single backslash, e.g., \theta -> \\theta)
-            # while leaving valid JSON escapes like \n, \t, \r intact.
-            preprocessed = re.sub(r'(?<!\\)\\([a-zA-Z]{2,})', r'\\\\\\1', text)
+            # # 2. Target all common LaTeX commands and symbols (e.g., \begin, \section, \frac, \theta, \includegraphics)
+            # # This turns single backslashes into valid double backslashes (\\) before JSON interprets them.
+            # # We match a backslash followed by alphabetic characters representing LaTeX commands.
+            # cleaned_text = re.sub(r'(?<!\\)\\([a-zA-Z]+)', r'\\\\\\1', cleaned_text)
             
-            # Target Windows paths or other single backslashes not followed by valid JSON escape sequences
-            preprocessed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', preprocessed)
+            # # 3. Catch any remaining isolated single backslashes not matching valid JSON rules
+            # cleaned_text = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', cleaned_text)
+
+            # # 4. Repair and load the sanitized JSON string
+            # repaired_str = repair_json(cleaned_text)
+            # return json.loads(repaired_str)
             
-            # 3. Pass the sanitized string into json_repair
-            repaired_str = repair_json(preprocessed)
-            return json.loads(repaired_str)
-            
+            match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+            json_str = match.group(1) if match else text
+
+            # 3. Aggressive LaTeX & Escape Sanitizer:
+            # Any single backslash followed by letters (LaTeX commands like \label, \dot, \begin, etc.) 
+            # must be converted into a double backslash (\\) so JSON accepts it as a literal backslash.
+            # We look for a backslash NOT preceded by another backslash, followed by letters.
+            sanitized = re.sub(r'(?<!\\)\\([a-zA-Z]+)', r'\\\\\\1', json_str)
+
+            # 4. Handle any remaining isolated single backslashes (like Windows paths or symbols)
+            # that are not valid JSON escape characters (n, r, t, b, f, u, ", \, /)
+            sanitized = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', sanitized)
+
+            # 5. Parse directly using standard json.loads
+            return json.loads(sanitized)
+        
         except Exception as e:
             logging.error(f"Failed to parse or repair JSON: {text[:100]}... Error: {e}")
             return {"error": "Invalid JSON format", "raw": text}
@@ -168,8 +185,8 @@ class LLMModule:
                 logging.error(f"Invalid request format: {res}")
                 return {'error': "Invalid request format"} 
         except Exception as e:
-            logging.error(f"Error invoking LLM: {str(e)}")
-            return {'error': f"An error occurred while invoking LLM: {str(e)}"}
+            logging.error(f"Error invoking LLM: {str(e)} \n\n {str(res)}")
+            return {'error': f"An error occurred while invoking LLM: {str(e)} \n\n {str(res)}"}
 
 class BlockingRateLimiter:
     def __init__(self, max_calls=5, period=60, min_interval=8):
