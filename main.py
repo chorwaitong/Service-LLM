@@ -2,15 +2,11 @@ from collections import deque
 from datetime import date
 from flask import Flask, request, jsonify
 import json
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.utils.json import parse_json_markdown
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, AIMessage
+
+
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-import pyttsx3
-
 import threading
 import time
 
@@ -44,11 +40,26 @@ class SuppressHealthCheckFilter(logging.Filter):
 logging.getLogger("werkzeug").addFilter(SuppressHealthCheckFilter())
 
 
+def safe_parse_llm_json_pro(response):
+    from json_repair import repair_json
+    text = response.content if hasattr(response, 'content') else str(response)
+    try:
+        # repair_json automatically fixes quotes, trailing commas, and bad escapes
+        fixed_json_str = repair_json(text, return_objects=True)
+        if isinstance(fixed_json_str, dict):
+            return fixed_json_str
+        return json.loads(fixed_json_str)
+    except Exception as e:
+        logging.error(f"Failed to repair and parse JSON: {e}")
+        return {"error": "Invalid JSON format", "raw": text}
+    
 def safe_parse_llm_json(response):
+    from langchain_core.utils.json import parse_json_markdown
     """
     Extracts and parses JSON from a string that might contain 
     markdown code blocks (```json ... ```) or extra whitespace.
     """
+    from langchain_core.messages import HumanMessage, AIMessage
     if isinstance(response, AIMessage):
         text = response.content
     else:
@@ -62,7 +73,13 @@ def safe_parse_llm_json(response):
         return {"error": "Invalid JSON format", "raw": text}
 
 class LLMModule:
+    
+
     def __init__(self):
+        from langchain_core.output_parsers import JsonOutputParser    
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        
+        
         self.llm = ChatGoogleGenerativeAI(
             model=MODEL_BAME,
             response_mime_type="application/json",
@@ -84,11 +101,14 @@ class LLMModule:
         logging.info(f"LLMModule initialized with model {MODEL_BAME}")
 
     def invoke(self, res):
+        from langchain_core.messages import HumanMessage
         try:
             if 'type' not in res and 'prompt' in res:
                 logging.info(f"Invoking LLM with text prompt")
                 response = self.llm.invoke(res.get("prompt"))
-                parsed_data = safe_parse_llm_json(response)
+                # parsed_data = safe_parse_llm_json(response)
+                parsed_data = safe_parse_llm_json_pro(response)
+                
                 return parsed_data
 
                 # return self.chain.invoke(res.get("prompt")) #this sometimes gives json parsing error
@@ -165,8 +185,9 @@ class BlockingRateLimiter:
                 time.sleep(0.5)
 
 
-class Utterance():
+class Utterance():   
     def __init__(self):    
+        import pyttsx3
         self.voice_engine = pyttsx3.init()
         # voices = self.voice_engine.getProperty('voices')
         # self.voice_engine.setProperty('voice', self.voice_engine.getProperty('voices')[2].id)

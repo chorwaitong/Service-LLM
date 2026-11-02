@@ -3,7 +3,39 @@
   "count": 202,
   "last_warned": 200,
   "2026-10-22": {
-    "count": 4,
+    "count": 19,
     "last_warned": 0
+  },
+  "2026-10-23": {
+    "count": 11,
+    "last_warned": 0
+  },
+  "2026-10-26": {
+    "count": 33,
+    "last_warned": 0
+  },
+  "2026-10-27": {
+    "count": 30,
+    "last_warned": 0
+  },
+  "2026-10-28": {
+    "count": 95,
+    "last_warned": 0
+  },
+  "2026-10-29": {
+    "count": 24,
+    "last_warned": 0
+  },
+  "2026-10-30": {
+    "count": 153,
+    "last_warned": 150
+  },
+  "2026-10-31": {
+    "count": 22,
+    "last_warned": 0
+  },
+  "2026-11-02": {
+    "count": 286,
+    "last_warned": 200
   }
 }
