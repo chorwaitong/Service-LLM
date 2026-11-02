@@ -72,6 +72,38 @@ def safe_parse_llm_json(response):
         logging.error(f"Failed to parse JSON: {text[:100]}... Error: {e}")
         return {"error": "Invalid JSON format", "raw": text}
 
+def safe_parse_llm_json_v2(response):
+    from langchain_core.utils.json import parse_json_markdown
+    from json_repair import repair_json
+    from langchain_core.messages import AIMessage
+    import re
+    if isinstance(response, AIMessage):
+        text = response.content
+    else:
+        text = str(response)
+        
+    try:
+        # 1. Try standard parser first
+        return parse_json_markdown(text)
+    except Exception:
+        try:
+            # 2. Pre-process unescaped backslashes:
+            
+            # Target LaTeX commands (2+ letter words following a single backslash, e.g., \theta -> \\theta)
+            # while leaving valid JSON escapes like \n, \t, \r intact.
+            preprocessed = re.sub(r'(?<!\\)\\([a-zA-Z]{2,})', r'\\\\\\1', text)
+            
+            # Target Windows paths or other single backslashes not followed by valid JSON escape sequences
+            preprocessed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', preprocessed)
+            
+            # 3. Pass the sanitized string into json_repair
+            repaired_str = repair_json(preprocessed)
+            return json.loads(repaired_str)
+            
+        except Exception as e:
+            logging.error(f"Failed to parse or repair JSON: {text[:100]}... Error: {e}")
+            return {"error": "Invalid JSON format", "raw": text}
+    
 class LLMModule:
     
 
@@ -107,7 +139,7 @@ class LLMModule:
                 logging.info(f"Invoking LLM with text prompt")
                 response = self.llm.invoke(res.get("prompt"))
                 # parsed_data = safe_parse_llm_json(response)
-                parsed_data = safe_parse_llm_json_pro(response)
+                parsed_data = safe_parse_llm_json_v2(response)
                 
                 return parsed_data
 
