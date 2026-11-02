@@ -2,8 +2,6 @@ from collections import deque
 from datetime import date
 from flask import Flask, request, jsonify
 import json
-
-
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -122,8 +120,6 @@ def safe_parse_llm_json_v2(response):
             return {"error": "Invalid JSON format", "raw": text}
     
 class LLMModule:
-    
-
     def __init__(self):
         from langchain_core.output_parsers import JsonOutputParser    
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -189,7 +185,7 @@ class LLMModule:
             return {'error': f"An error occurred while invoking LLM: {str(e)} \n\n {str(res)}"}
 
 class BlockingRateLimiter:
-    def __init__(self, max_calls=5, period=60, min_interval=8):
+    def __init__(self, max_calls=10, period=60, min_interval=5):
         self.max_calls = max_calls
         self.period = period
         self.min_interval = min_interval
@@ -289,23 +285,6 @@ class DailyUsageTracker:
                 logging.error(f"Failed to load usage file: {e}")
                 self.data = {}
 
-        # Old codes before issues with date handling
-        # today = date.today().isoformat()
-        # if os.path.exists(self.path):
-        #     with open(self.path, "r") as f:
-        #         data = json.load(f)
-        #     if data.get("date") == today:
-        #         self.date = today
-        #         self.count = data.get("count", 0)
-        #         self.last_warned = data.get("last_warned", 0)
-        #         return
-
-        # # reset for new day
-        # self.date = today
-        # self.count = 0
-        # self.last_warned = 0
-        # self._persist()
-
     def _get_today_record(self):
         today = date.today().isoformat()
         # If the date changes (e.g. midnight crossed or system woke from hibernation)
@@ -354,7 +333,7 @@ class DailyUsageTracker:
 try:
     app = Flask(__name__)
     llm = LLMModule()
-    limiter = BlockingRateLimiter(max_calls=5, period=60)
+    limiter = BlockingRateLimiter()
     speaking = Utterance()    
     usage_tracker = DailyUsageTracker()
     logging.info("FastAPI app for Jarvis service initialized")
