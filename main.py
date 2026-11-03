@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 # 2. Create the rotating file handler
 handler = RotatingFileHandler(
     "llm_service.log", 
-    maxBytes=5*1024*1024,  # 5 MB
+    maxBytes=2*1024*1024,  # 5 MB
     backupCount=2
 )
 
@@ -84,21 +84,7 @@ def safe_parse_llm_json_v2(response):
         # 1. Try standard parser first
         return parse_json_markdown(text)
     except Exception:
-        try:
-            # cleaned_text = text
-            
-            # # 2. Target all common LaTeX commands and symbols (e.g., \begin, \section, \frac, \theta, \includegraphics)
-            # # This turns single backslashes into valid double backslashes (\\) before JSON interprets them.
-            # # We match a backslash followed by alphabetic characters representing LaTeX commands.
-            # cleaned_text = re.sub(r'(?<!\\)\\([a-zA-Z]+)', r'\\\\\\1', cleaned_text)
-            
-            # # 3. Catch any remaining isolated single backslashes not matching valid JSON rules
-            # cleaned_text = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', cleaned_text)
-
-            # # 4. Repair and load the sanitized JSON string
-            # repaired_str = repair_json(cleaned_text)
-            # return json.loads(repaired_str)
-            
+        try:           
             match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
             json_str = match.group(1) if match else text
 
@@ -110,14 +96,12 @@ def safe_parse_llm_json_v2(response):
             # Any single backslash followed by letters (LaTeX commands like \label, \dot, \begin, etc.) 
             # must be converted into a double backslash (\\) so JSON accepts it as a literal backslash.
             # We look for a backslash NOT preceded by another backslash, followed by letters.
-            sanitized = re.sub(r'(?<!\\)\\([a-zA-Z]+)', r'\\\\\\1', json_str)
+            # sanitized = re.sub(r'(?<!\\)\\([a-zA-Z]+)', r'\\\\\\1', json_str) #not working as it resulted into many \\1
+            sanitized = re.sub(r'(?<!\\)\\([a-zA-Z]+)', lambda m: '\\\\' + m.group(1), json_str)
 
             # 4. Handle any remaining isolated single backslashes (like Windows paths or symbols)
             # that are not valid JSON escape characters (n, r, t, b, f, u, ", \, /)
             sanitized = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', sanitized)
-
-            # 5. Parse directly using standard json.loads
-            # return json.loads(sanitized)
         
             # Parse using the repaired version of json.loads
             repaired_str = repair_json(sanitized)
@@ -190,9 +174,22 @@ class LLMModule:
             else:
                 logging.error(f"Invalid request format: {res}")
                 return {'error': "Invalid request format"} 
+            
         except Exception as e:
-            logging.error(f"Error invoking LLM: {str(e)} \n\n {str(res)}")
-            return {'error': f"An error occurred while invoking LLM: {str(e)} \n\n {str(res)}"}
+            # Extract detailed Google API error response if available
+            error_details = str(e)
+            if hasattr(e, 'response') and e.response:
+                try:
+                    error_details = e.response.text
+                except Exception:
+                    pass
+            elif hasattr(e, 'body'):
+                error_details = str(e.body)
+
+            logging.error(f"Google API Request Details: {error_details}")
+            logging.error(f"Request payload was: {res}")
+            
+            return {'error': f"Error Invoking LLM: {error_details}"}
 
 class BlockingRateLimiter:
     def __init__(self, max_calls=10, period=60, min_interval=5):
@@ -353,6 +350,7 @@ except Exception as e:
 @app.route("/invoke", methods=["POST"])
 def invoke_llm():
     limiter.acquire()  # blocks until permit available
+    logging.info("Limiter permitted.")
     try:       
         body = request.get_json()
         usage = usage_tracker.increment()
