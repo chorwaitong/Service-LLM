@@ -102,6 +102,10 @@ def safe_parse_llm_json_v2(response):
             match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
             json_str = match.group(1) if match else text
 
+            # --- FIX INVALID SINGLE-QUOTE ESCAPES ---
+            json_str = re.sub(r'\\\\?\'', "'", json_str)
+            # -----------------------------------------------------------
+
             # 3. Aggressive LaTeX & Escape Sanitizer:
             # Any single backslash followed by letters (LaTeX commands like \label, \dot, \begin, etc.) 
             # must be converted into a double backslash (\\) so JSON accepts it as a literal backslash.
@@ -113,10 +117,16 @@ def safe_parse_llm_json_v2(response):
             sanitized = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', sanitized)
 
             # 5. Parse directly using standard json.loads
-            return json.loads(sanitized)
+            # return json.loads(sanitized)
         
+            # Parse using the repaired version of json.loads
+            repaired_str = repair_json(sanitized)
+            return json.loads(repaired_str)
         except Exception as e:
             logging.error(f"Failed to parse or repair JSON: {text[:100]}... Error: {e}")
+            if repaired_str:
+                logging.error(f"Repaired json str: \n {repaired_str}")
+            
             return {"error": "Invalid JSON format", "raw": text}
     
 class LLMModule:
