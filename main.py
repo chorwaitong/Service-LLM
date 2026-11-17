@@ -5,6 +5,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
 import threading
 import time
 
@@ -37,38 +38,6 @@ class SuppressHealthCheckFilter(logging.Filter):
 # Attach the filter to Werkzeug's logger
 logging.getLogger("werkzeug").addFilter(SuppressHealthCheckFilter())
 
-
-def safe_parse_llm_json_pro(response):
-    from json_repair import repair_json
-    text = response.content if hasattr(response, 'content') else str(response)
-    try:
-        # repair_json automatically fixes quotes, trailing commas, and bad escapes
-        fixed_json_str = repair_json(text, return_objects=True)
-        if isinstance(fixed_json_str, dict):
-            return fixed_json_str
-        return json.loads(fixed_json_str)
-    except Exception as e:
-        logging.error(f"Failed to repair and parse JSON: {e}")
-        return {"error": "Invalid JSON format", "raw": text}
-    
-def safe_parse_llm_json(response):
-    from langchain_core.utils.json import parse_json_markdown
-    """
-    Extracts and parses JSON from a string that might contain 
-    markdown code blocks (```json ... ```) or extra whitespace.
-    """
-    from langchain_core.messages import HumanMessage, AIMessage
-    if isinstance(response, AIMessage):
-        text = response.content
-    else:
-        text = str(response)
-        
-    try:
-        # This handles the ```json ... ``` wrapper automatically
-        return parse_json_markdown(text)
-    except Exception as e:
-        logging.error(f"Failed to parse JSON: {text[:100]}... Error: {e}")
-        return {"error": "Invalid JSON format", "raw": text}
 
 def safe_parse_llm_json_v2(response):
     from langchain_core.utils.json import parse_json_markdown
@@ -145,12 +114,9 @@ class LLMModule:
             if 'type' not in res and 'prompt' in res:
                 logging.info(f"Invoking LLM with text prompt")
                 response = self.llm.invoke(res.get("prompt"))
-                # parsed_data = safe_parse_llm_json(response)
-                parsed_data = safe_parse_llm_json_v2(response)
-                
+                parsed_data = safe_parse_llm_json_v2(response)                
                 return parsed_data
 
-                # return self.chain.invoke(res.get("prompt")) #this sometimes gives json parsing error
             elif 'type' in res and res['type'] == 'TextReply':
                 logging.info(f"Invoking LLM with TextReply prompt")
                 message = HumanMessage(
@@ -166,14 +132,16 @@ class LLMModule:
                             "type": "media",
                             "source_type": "base64",
                             "mime_type": res.get("mime_type", "application/pdf"),
-                            "data": res.get("pdf_base64", None)
+                            "data": res.get("data", res.get("pdf_base64", None))
                         },
                     ]
                 )
                 return self.chain.invoke([message]) 
+            
             else:
                 logging.error(f"Invalid request format: {res}")
                 return {'error': "Invalid request format"} 
+            
             
         except Exception as e:
             # Extract detailed Google API error response if available
@@ -337,15 +305,7 @@ class DailyUsageTracker:
         record["last_warned"] = record["count"]
         self._persist()
 
-try:
-    app = Flask(__name__)
-    llm = LLMModule()
-    limiter = BlockingRateLimiter()
-    speaking = Utterance()    
-    usage_tracker = DailyUsageTracker()
-    logging.info("FastAPI app for Jarvis service initialized")
-except Exception as e:
-    logging.error(f"Error initializing FastAPI app: {str(e)}")
+app = Flask(__name__)
 
 @app.route("/invoke", methods=["POST"])
 def invoke_llm():
@@ -391,5 +351,15 @@ def say():
 def health():
     return {"status": "ok"}
 
-app.run(host="127.0.0.1", port=8000, debug=False, use_reloader=True, threaded=True)
+if __name__ == "__main__":
+    try:
+        llm = LLMModule()
+        limiter = BlockingRateLimiter()
+        speaking = Utterance()    
+        usage_tracker = DailyUsageTracker()
+        logging.info("FastAPI app for Jarvis service initialized")
+    except Exception as e:
+        logging.error(f"Error initializing FastAPI app: {str(e)}")
+        sys.exit(-1)
 
+    app.run(host="127.0.0.1", port=8000, debug=False, use_reloader=True, threaded=True)
